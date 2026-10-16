@@ -190,15 +190,16 @@ footer.sec p{margin:0 0 6px;max-width:64ch}
           <label><input type="checkbox" id="l-shadow" checked> Shadows</label>
           <label><input type="checkbox" id="l-labels" checked> Labels</label>
           <label><input type="checkbox" id="l-sur" checked> Surroundings</label>
+          <label><input type="checkbox" id="l-trees" checked> Trees</label>
           <label><input type="checkbox" id="l-fac" checked> Playgrounds, pavilions, linkways (brochure)</label>
           <label><input type="checkbox" id="l-osm" checked> Roads, industry, greenery (OpenStreetMap)</label>
           <label><input type="checkbox" id="l-path" checked> Sun path</label>
           <label><input type="checkbox" id="l-future" checked> Reserved sites (simulated)</label>
           <label><input type="checkbox" id="l-hl" checked> Highlight my stack</label>
         </div>
-        <div class="fld"><label for="fut">Height</label><input id="fut" type="range" min="0" max="45" step="1" value="4"><output id="fut-o"></output></div>
+        <div class="fld"><label for="fut">Height</label><input id="fut" type="range" min="0" max="45" step="1" value="0"><output id="fut-o"></output></div>
         <p class="note" id="osm-st">OpenStreetMap details load when the page opens.</p>
-        <p class="note">The two reserved sites have no official plans yet, so they start at 4 storeys as a placeholder. Slide to 0 for a flat footprint or up to 45 to test a tall neighbour.</p>
+        <p class="note">The two reserved sites have no official plans yet, so they start as a flat footprint. Slide up to 45 storeys to test a tall neighbour.</p>
       </div>
 
       <nav class="tabs" role="tablist" id="tabs">
@@ -433,7 +434,7 @@ function surroundings(futureStoreys) {
 }
 
 // JRL viaduct centre line (site-plan px), deck ~14 m
-const VIADUCT = [[1425, 150], [1425, 560], [1405, 640], [1380, 800], [1365, 1000], [1335, 1150], [1285, 1290], [1225, 1410], [1140, 1520], [1050, 1700], [985, 1800]].map(([x, y]) => SP(x, y));
+const VIADUCT = [[1425, 150], [1425, 560], [1405, 640], [1380, 800], [1365, 1000], [1335, 1150], [1285, 1290], [1233, 1440], [1147, 1574], [1063, 1707], [985, 1800]].map(([x, y]) => SP(x, y));
 const VIADUCT_H = 14, VIADUCT_W = 9;
 function viaductPolys() {
   const out = [];
@@ -643,8 +644,8 @@ const now = new Date();
 const YEAR = now.getFullYear();
 const S = {
   unit: '417A#909', level: 25, doy: dayOfYear(YEAR, now.getMonth() + 1, now.getDate()), hour: 16,
-  fut: 4, mode: 'orbit', tab: 'sky', play: false,
-  L: { shadow: true, labels: true, fac: true, osm: true, sur: true, path: true, future: true, hl: true },
+  fut: 0, mode: 'orbit', tab: 'sky', play: false,
+  L: { shadow: true, labels: true, trees: true, fac: true, osm: true, sur: true, path: true, future: true, hl: true },
 };
 
 const futTxt = () => S.fut === 0 ? 'footprint' : S.fut + (S.fut === 1 ? ' storey' : ' storeys');
@@ -782,6 +783,7 @@ const mFut = new THREE.MeshStandardMaterial({ color: 0xb7a3d8, roughness: .9, tr
 const mVia = new THREE.MeshStandardMaterial({ color: 0xb8c1c6, roughness: .8 });
 const edgeMat = new THREE.LineBasicMaterial({ color: 0x6d5a94 });
 
+const mCpDark = new THREE.MeshStandardMaterial({ color: 0x6d7173, roughness: .95 }), mCpSlab = new THREE.MeshStandardMaterial({ color: 0xdcdad4, roughness: .9 }), mCpBlue = new THREE.MeshStandardMaterial({ color: 0x1f5bc0, roughness: .8 });
 const mHdbLow = new THREE.MeshStandardMaterial({ color: 0xc8c6c0, roughness: .95 });
 const mHdbHigh = new THREE.MeshStandardMaterial({ color: 0xb9c6d4, roughness: .9 });
 function buildHdb() {
@@ -806,7 +808,14 @@ function buildSurroundings() {
       const m = extrude(o.poly, o.top, mFut); futGroup.add(m);
       const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), edgeMat); e.position.copy(m.position); futGroup.add(e);
     } else if (o.kind === 'mscp') {
-      surGroup.add(extrude(o.poly, o.top, o.id.startsWith('th') ? MAT.TH.pod : mFlat)); surGroup.add(extrude(o.poly, 0.7, mGreen, o.top));
+      const tall = o.top >= 20;
+      surGroup.add(extrude(o.poly, o.top, tall ? mCpDark : (o.id.startsWith('th') ? MAT.TH.pod : mFlat))); surGroup.add(extrude(o.poly, 0.7, mGreen, o.top));
+      if (tall) {
+        const c = o.poly.reduce((q, p) => [q[0] + p[0] / o.poly.length, q[1] + p[1] / o.poly.length], [0, 0]), big = o.poly.map(([x, z]) => [c[0] + (x - c[0]) * 1.006, c[1] + (z - c[1]) * 1.006]);
+        const pitch = o.top / 7; for (let i = 1; i <= 7; i++) surGroup.add(extrude(big, 0.9, mCpSlab, i * pitch - 0.9));
+        if (o.id === 'mscp') { let bi = 0, bj = 1, bd = 0; for (let i = 0; i < o.poly.length; i++) for (let j = i + 1; j < o.poly.length; j++) { const d = Math.hypot(o.poly[i][0] - o.poly[j][0], o.poly[i][1] - o.poly[j][1]); if (d > bd) { bd = d; bi = i; bj = j; } }
+          for (const k of [bi, bj]) { const p = o.poly[k], d = Math.hypot(c[0] - p[0], c[1] - p[1]) || 1, x = p[0] + (c[0] - p[0]) / d * 4, z = p[1] + (c[1] - p[1]) / d * 4; const t = new THREE.Mesh(new THREE.BoxGeometry(6, o.top + 4, 6), mCpBlue); t.position.set(x, (o.top + 4) / 2, z); t.castShadow = t.receiveShadow = true; surGroup.add(t); } }
+      }
     } else surGroup.add(extrude(o.poly, o.top, mSur));
   }
   for (const v of viaductPolys()) {
@@ -1018,6 +1027,7 @@ const bind = (id, key, fn) => { $(id).onchange = e => { S.L[key] = e.target.chec
 bind('#l-shadow', 'shadow', applySun);
 bind('#l-labels', 'labels', () => { labelGroup.visible = S.L.labels && S.mode === 'orbit'; pinGroup.visible = labelGroup.visible; });
 bind('#l-sur', 'sur', () => { surGroup.visible = S.L.sur; hdbGroup.visible = S.L.sur; osmGroup.visible = S.L.sur && S.L.osm; });
+bind('#l-trees', 'trees', applyTrees);
 bind('#l-fac', 'fac', () => { facGroup.visible = S.L.fac; });
 bind('#l-osm', 'osm', () => { OSM.on = S.L.osm && OSM.obs.length > 0; osmGroup.visible = S.L.osm && S.L.sur; osmCover.visible = osmGroup.visible; buildSurroundings(); buildLabels(); }); 
 bind('#l-path', 'path', () => { pathGroup.visible = S.L.path; sunDisc.visible = S.L.path; applySun(); });
@@ -1244,41 +1254,75 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { bu
 
 /* ---------- facilities read off the two brochure site plans: play, fitness, pavilions, drop-off porches, linkways, boundary trees ---------- */
 const facGroup = new THREE.Group(); worldGroup.add(facGroup);
+const TREE_MESHES = [];
+const HAND_BUS = [];
+function busStop(parent, x, z, ang) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ang || 0; parent.add(g);
+  const st = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: .8 }, o || {}));
+  const add = (geo, mat, px, py, pz) => { const m = new THREE.Mesh(geo, mat); m.position.set(px, py, pz); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
+  add(new THREE.BoxGeometry(11, 0.18, 2.6), st(0x2f6f9f), 0, 2.7, 0);                                  // roof
+  for (const s of [-1, 1]) for (const d of [-1, 1]) add(new THREE.BoxGeometry(0.14, 2.6, 0.14), st(0xb8c1c6), s * 5.2, 1.3, d * 1.1);
+  add(new THREE.BoxGeometry(10.4, 1.5, 0.06), st(0x9fc4d6, { transparent: true, opacity: .45 }), 0, 1.5, -1.15);   // glass back
+  add(new THREE.BoxGeometry(3.4, 0.12, 0.55), st(0x7a5a3a), 0, 0.5, -0.8);                              // bench
+  add(new THREE.CylinderGeometry(0.08, 0.08, 3.6, 6), st(0x9aa3a8), 7, 1.8, 1.6);                      // sign pole
+  add(new THREE.BoxGeometry(0.7, 1.0, 0.08), st(0xf2c230), 7, 3.5, 1.6);
+  const bay = add(new THREE.BoxGeometry(14, 0.04, 3.4), st(0x6e7274), 0, 0.03, 2.8); bay.castShadow = false;
+  return g;
+}
+function applyTrees() { for (const m of TREE_MESHES) if (m.parent) m.visible = S.L.trees; needRender(); }
 {
   const std = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: .9 }, o || {}));
   const F = { pad: std(0xc7835f), padB: std(0x7391a3), court: std(0x5c8d78), line: std(0xffffff), floor: std(0xd8d2c6), roof: std(0xc9b79c), wood: std(0x8a6b4a), post: std(0xe8e2d6), yel: std(0xe8b04a), red: std(0xd4533b), blue: std(0x3d6e91), link: std(0x8a6b4a), lawn: std(0xc9d9ae) };
   const add = (geo, mat, x, y, z, ry) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (ry) m.rotation.y = ry; m.castShadow = m.receiveShadow = true; facGroup.add(m); return m; };
+  const KO = { c: [], e: [], s: [] };   // keep-out zones so trees never cover paths, pads and linkways
   const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
   const cyl = (r, h, n) => new THREE.CylinderGeometry(r, r, h, n || 20);
+  const LEAF = std(0x3f9d6a), POLE = std(0x9a7a52), RUB = [std(0x4fb3c9), std(0x3f8fd0), std(0xe08a3c)], PATH = std(0x7b4b3d), BED = std(0x4e8a4a), SLIDE = std(0x9bc89a), BENCH = std(0x7a5a3a), FLOWER = std(0xf3f3ea);
+  let pgN = 0;
   function playground(x, z, r, y0) {
-    y0 = y0 || 0; add(cyl(r, 0.4, 24), F.pad, x, y0 + 0.2, z);
-    add(box(2, 2.4, 2), F.yel, x - r * 0.3, y0 + 1.6, z - r * 0.2); add(new THREE.ConeGeometry(1.7, 1.2, 4), F.red, x - r * 0.3, y0 + 3.4, z - r * 0.2, Math.PI / 4);
-    add(box(0.5, 0.2, 3.2), F.blue, x - r * 0.3 + 1.4, y0 + 1.3, z - r * 0.2 + 2.2, 0).rotation.x = 0.45;
-    add(box(0.2, 2.4, 0.2), F.post, x + r * 0.35, y0 + 1.6, z - r * 0.3); add(box(0.2, 2.4, 0.2), F.post, x + r * 0.35, y0 + 1.6, z + r * 0.3); add(box(0.2, 0.2, r * 0.6 + 0.2), F.red, x + r * 0.35, y0 + 2.7, z);
-    if (r > 5) for (let i = 0; i < 3; i++) add(cyl(0.45, 0.8, 8), [F.red, F.yel, F.blue][i], x + (i - 1) * 1.6, y0 + 0.8, z + r * 0.55);
+    y0 = y0 || 0; const k = pgN++; KO.c.push([x, z, r + 5]);
+    const pad = add(cyl(r, 0.3, 28), RUB[k % 3], x, y0 + 0.15, z); pad.scale.set(1, 1, 0.78);
+    // timber poles with big leaf-shaped canopies (the artist impression's play structure)
+    const n = r > 5 ? 5 : 3;
+    for (let i = 0; i < n; i++) {
+      const a = i / n * 6.283 + 0.4, px = x + Math.cos(a) * r * 0.45, pz = z + Math.sin(a) * r * 0.35, h = 4.2 + (i % 3) * 1.1;
+      add(cyl(0.16, h, 6), POLE, px, y0 + h / 2, pz);
+      const leaf = add(new THREE.SphereGeometry(1, 8, 6), LEAF, px + Math.cos(a) * 0.9, y0 + h + 0.1, pz + Math.sin(a) * 0.9); leaf.scale.set(2.1, 0.22, 1.3); leaf.rotation.y = -a; leaf.rotation.z = 0.18;
+    }
+    add(new THREE.ConeGeometry(1.8, 1.6, 6), POLE, x, y0 + 4.6, z);                  // central thatched-roof tower
+    add(cyl(0.25, 3.8, 6), POLE, x, y0 + 1.9, z);
+    const s = add(box(0.9, 0.15, 4.2), SLIDE, x + r * 0.25, y0 + 1.5, z + r * 0.35, 0.6); s.rotation.x = 0.55;   // slide
+    add(box(1.6, 0.4, 0.5), BENCH, x - r * 0.1, y0 + 0.5, z + r * 0.78); add(box(1.6, 0.4, 0.5), BENCH, x + r * 0.75, y0 + 0.5, z - r * 0.2, 1.2);
+    for (let i = 0; i < 9; i++) { const a = i / 9 * 6.283, q = add(new THREE.SphereGeometry(1, 7, 5), i % 3 ? BED : FLOWER, x + Math.cos(a) * (r + 1.1), y0 + 0.4, z + Math.sin(a) * (r * 0.78 + 1.1)); q.scale.set(1.3, 0.7, 1.3); }
   }
+  function pathRing(x, z, rx, rz, w, y0) {
+    KO.e.push([x, z, rx, rz, w / 2 + 4.5]);
+    const g = new THREE.RingGeometry(1 - w / (2 * rx) * 1.0, 1 + w / (2 * rx) * 1.0, 40); g.rotateX(-Math.PI / 2);
+    const m = add(g, PATH, x, (y0 || 0) + 0.34, z); m.scale.set(rx, 1, rz); m.castShadow = false;
+  }
+  function bed(x, z, r, y0) { add(cyl(r, 0.5, 24), BED, x, (y0 || 0) + 0.25, z); for (let i = 0; i < 12; i++) { const a = i * 2.4, d = Math.sqrt((i + 1) / 12) * r * 0.85; const q = add(new THREE.SphereGeometry(1, 7, 5), i % 4 ? BED : FLOWER, x + Math.cos(a) * d, (y0 || 0) + 0.7, z + Math.sin(a) * d); q.scale.set(1.1, 0.6, 1.1); } }
   function fitness(x, z, r, y0, ang) {
-    y0 = y0 || 0; add(cyl(r, 0.35, 24), F.padB, x, y0 + 0.18, z);
+    y0 = y0 || 0; KO.c.push([x, z, r + 4.5]); add(cyl(r, 0.35, 24), F.padB, x, y0 + 0.18, z);
     for (let i = 0; i < 3; i++) { const a = (ang || 0), dx = (i - 1) * 2.2 * Math.cos(a), dz = (i - 1) * 2.2 * Math.sin(a); add(box(0.15, 2.0, 0.15), F.blue, x + dx - 0.7, y0 + 1.2, z + dz); add(box(0.15, 2.0, 0.15), F.blue, x + dx + 0.7, y0 + 1.2, z + dz); add(box(1.55, 0.12, 0.12), F.blue, x + dx, y0 + 2.1, z + dz); }
   }
   function court(x, z, w, d, ang, y0) {
-    y0 = y0 || 0; const g = new THREE.Group(); g.position.set(x, y0, z); g.rotation.y = ang || 0; facGroup.add(g);
+    y0 = y0 || 0; KO.c.push([x, z, Math.max(w, d) / 2 + 4]); const g = new THREE.Group(); g.position.set(x, y0, z); g.rotation.y = ang || 0; facGroup.add(g);
     const m = new THREE.Mesh(box(w, 0.3, d), F.court); m.position.y = 0.15; m.receiveShadow = true; g.add(m);
     const l = new THREE.Mesh(box(w - 1, 0.32, 0.15), F.line); l.position.y = 0.17; g.add(l);
     for (const s of [-1, 1]) { const p = new THREE.Mesh(box(0.2, 3.2, 0.2), F.post); p.position.set(0, 1.9, s * (d / 2 - 0.6)); p.castShadow = true; g.add(p); const b = new THREE.Mesh(box(1.2, 0.8, 0.1), F.line); b.position.set(0, 3.2, s * (d / 2 - 0.8)); g.add(b); }
   }
   function pavilion(x, z, r, y0) {
-    y0 = y0 || 0; add(cyl(r, 0.25, 6), F.floor, x, y0 + 0.13, z);
+    y0 = y0 || 0; KO.c.push([x, z, r + 4.5]); add(cyl(r, 0.25, 6), F.floor, x, y0 + 0.13, z);
     for (let i = 0; i < 6; i++) { const a = i / 6 * 6.283 + 0.52; add(cyl(0.22, 3.3, 8), F.wood, x + Math.cos(a) * (r - 0.6), y0 + 1.9, z + Math.sin(a) * (r - 0.6)); }
     add(new THREE.ConeGeometry(r + 0.8, 1.3, 6), F.roof, x, y0 + 4.3, z);
   }
   function porch(x, z, w, d, ang, y0) {
-    y0 = y0 || 0; const g = new THREE.Group(); g.position.set(x, y0, z); g.rotation.y = ang || 0; facGroup.add(g);
+    y0 = y0 || 0; KO.c.push([x, z, Math.max(w, d) / 2 + 4]); const g = new THREE.Group(); g.position.set(x, y0, z); g.rotation.y = ang || 0; facGroup.add(g);
     const roof = new THREE.Mesh(box(w, 0.35, d), F.link); roof.position.y = 3.9; roof.castShadow = roof.receiveShadow = true; g.add(roof);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const p = new THREE.Mesh(box(0.35, 3.8, 0.35), F.post); p.position.set(sx * (w / 2 - 0.5), 1.9, sz * (d / 2 - 0.5)); p.castShadow = true; g.add(p); }
   }
   function linkway(pts, y0) {
-    y0 = y0 || 0;
+    y0 = y0 || 0; for (let i = 0; i < pts.length - 1; i++) KO.s.push([pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], 5]);
     for (let i = 0; i < pts.length - 1; i++) {
       const [ax, az] = pts[i], [bx, bz] = pts[i + 1], L = Math.hypot(bx - ax, bz - az); if (L < 0.5) continue;
       const m = add(box(L + 0.3, 0.25, 2.6), F.link, (ax + bx) / 2, y0 + 3.2, (az + bz) / 2, -Math.atan2(bz - az, bx - ax));
@@ -1286,7 +1330,7 @@ const facGroup = new THREE.Group(); worldGroup.add(facGroup);
       for (let k = 0; k <= n; k++) { const t = k / n, px = ax + (bx - ax) * t, pz = az + (bz - az) * t, nx = -(bz - az) / L * 1.1, nz = (bx - ax) / L * 1.1; add(box(0.2, 3.1, 0.2), F.post, px + nx, y0 + 1.55, pz + nz); add(box(0.2, 3.1, 0.2), F.post, px - nx, y0 + 1.55, pz - nz); }
     }
   }
-  function roofLawn(x, z, r, y0) { add(cyl(r, 0.12, 28), F.floor, x, y0 + 0.06, z); add(cyl(r - 1.4, 0.16, 28), F.lawn, x, y0 + 0.1, z); }
+  function roofLawn(x, z, r, y0) { KO.c.push([x, z, r + 3]); add(cyl(r, 0.12, 28), F.floor, x, y0 + 0.06, z); add(cyl(r - 1.4, 0.16, 28), F.lawn, x, y0 + 0.1, z); }
   // ----- Teban Breeze (site plan page px = displayed x 1.65) -----
   const B = (u, v) => SP(u * 1.65, v * 1.65);
   const M = 0.341;               // metres per displayed px on the Breeze plan
@@ -1295,6 +1339,7 @@ const facGroup = new THREE.Group(); worldGroup.add(facGroup);
     for (const [u, v, r] of [[538, 593, 4], [570, 611, 3.6], [680, 362, 4.2], [770, 462, 3.2]]) { p = B(u, v); fitness(p[0], p[1], r, 0, 0.3); }
     p = B(467, 430); court(p[0], p[1], 8, 14, -0.45);
     p = B(377, 625); pavilion(p[0], p[1], 4.2);
+    p = B(545, 600); pathRing(p[0], p[1], 34, 20, 2.6); bed(...B(545, 600), 4);
     for (const [u, v, a] of [[627, 482, 0.3], [366, 669, 0.8], [723, 751, 0.9]]) { p = B(u, v); porch(p[0], p[1], 9, 5, a); }
     p = B(762, 553); pavilion(p[0], p[1], 3.6, 24.7);
     linkway([[640, 392], [700, 410], [805, 440], [808, 520], [790, 610], [850, 630]].map(([u, v]) => B(u, v)));
@@ -1304,6 +1349,7 @@ const facGroup = new THREE.Group(); worldGroup.add(facGroup);
     for (const [u, v, r] of [[800, 900, 9], [758, 1052, 8], [845, 1026, 4.5]]) { p = H(u, v); playground(p[0], p[1], r); }
     for (const [u, v, r] of [[1357, 1460, 5.5], [857, 808, 4]]) { p = H(u, v); fitness(p[0], p[1], r, 0, 0.3); }
     for (const [u, v, r] of [[1280, 1262, 3.6], [775, 1155, 4]]) { p = H(u, v); fitness(p[0], p[1], r, 0, 0.1); }
+    p = H(800, 975); pathRing(p[0], p[1], 24, 22, 2.8); bed(...H(820, 990), 4.5);
     p = H(947, 1020); pavilion(p[0], p[1], 6.5);
     p = H(1456, 1280); pavilion(p[0], p[1], 6.5);
     p = H(1045, 1027); porch(p[0], p[1], 12, 20, -0.35);
@@ -1313,6 +1359,17 @@ const facGroup = new THREE.Group(); worldGroup.add(facGroup);
       [[760, 775], [700, 1140]], [[1000, 940], [1240, 990], [1380, 760], [1530, 730], [1730, 775]],
       [[1440, 1130], [1510, 1100], [1630, 1190], [1780, 960]], [[470, 1240], [640, 1260]], [[510, 990], [600, 925]],
     ]) linkway(pl.map(([u, v]) => H(u, v)));
+  }
+  // JE7 (Jurong Region Line, u/c) station: arched roof on a deck beside the viaduct, as in the sales model
+  { const [sx, sz] = [45.5, 124.5], L = 64;
+    const g = new THREE.Group(); g.position.set(sx, 0, sz); g.rotation.y = -0.572; facGroup.add(g);
+    const body = new THREE.Mesh(box(14, 9, L), std(0xd4d6d6)); body.position.y = 14 + 4.5 - 2.2; body.castShadow = body.receiveShadow = true; g.add(body);
+    const rg = new THREE.CylinderGeometry(8.5, 8.5, L + 4, 20, 1, false, 0, Math.PI); rg.rotateX(Math.PI / 2); rg.rotateZ(Math.PI / 2); const roof = new THREE.Mesh(rg, std(0xe6e7e4, { side: THREE.DoubleSide })); roof.scale.set(1, 0.55, 1); roof.position.y = 14 + 9 - 2.2; roof.castShadow = true; g.add(roof);
+  }
+  // bus bays and shelters marked on the two site plans
+  { let p;
+  for (const [u, v, a] of [[840, 700, Math.PI / 2], [930, 790, Math.PI / 2], [420, 765, -0.33], [490, 858, -0.33]]) { p = B(u, v); busStop(facGroup, p[0], p[1], a); HAND_BUS.push(p); KO.c.push([p[0], p[1], 7]); }
+  for (const [u, v, a] of [[175, 1465, 0.1], [1745, 940, 0.9]]) { p = THW(u, v); busStop(facGroup, p[0], p[1], a); HAND_BUS.push(p); KO.c.push([p[0], p[1], 7]); }
   }
   // boundary trees along both plot edges, plus a few on the lawns
   const polyB = [[330, 438], [560, 350], [680, 328], [790, 385], [835, 408], [850, 520], [840, 600], [790, 700], [750, 790], [530, 760], [300, 700], [278, 640], [330, 560]].map(([u, v]) => B(u, v));
@@ -1326,10 +1383,21 @@ const facGroup = new THREE.Group(); worldGroup.add(facGroup);
     }
     for (let k = 0; k < 18; k++) { const a = rnd() * 6.283, d = rnd() * 0.55 * Math.hypot(poly[0][0] - cx, poly[0][1] - cz) * 0.8; trees.push([cx + Math.cos(a) * d, cz + Math.sin(a) * d, 0.6 + rnd() * 0.4]); }
   }
+  for (const [id, y] of [['mscp', 24.7], ['thmscp', 23.7]]) {
+    const o = surroundings(0).find(q => q.id === id); if (!o) continue; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const q of o.poly) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
+    let got = 0, tr = 0; while (got < 55 && tr++ < 600) { const x = x0 + rnd() * (x1 - x0), z = z0 + rnd() * (z1 - z0); if (inPoly(x, z, o.poly)) { trees.push([x, z, 0.38 + rnd() * 0.25, y]); got++; } }
+  }
+  const blocked = (x, z) => {
+    for (const [cx, cz, r] of KO.c) if (Math.hypot(x - cx, z - cz) < r) return true;
+    for (const [cx, cz, rx, rz, m] of KO.e) { const q = Math.hypot((x - cx) / rx, (z - cz) / rz); if (q < 1 + m / Math.min(rx, rz)) return true; }
+    for (const [ax, az, bx, bz, m] of KO.s) { const dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1))); if (Math.hypot(x - ax - dx * t, z - az - dz * t) < m) return true; }
+    return false;
+  };
+  for (let i = trees.length - 1; i >= 0; i--) if (!trees[i][3] && blocked(trees[i][0], trees[i][1])) trees.splice(i, 1);
   const tm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, vertexColors: true });
   const im = new THREE.InstancedMesh(treeGeo(), tm, trees.length), Mx = new THREE.Matrix4(), col = new THREE.Color(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), Sc = new THREE.Vector3(), Yv = new THREE.Vector3(0, 1, 0);
-  trees.forEach((t, i) => { Q.setFromAxisAngle(Yv, rnd() * 6.28); V.set(t[0], 0, t[1]); Sc.set(t[2], t[2], t[2]); Mx.compose(V, Q, Sc); im.setMatrixAt(i, Mx); col.setHSL(0.24 + rnd() * 0.07, 0.38 + rnd() * 0.14, 0.1 + rnd() * 0.08); im.setColorAt(i, col); });
-  im.castShadow = im.receiveShadow = true; facGroup.add(im);
+  trees.forEach((t, i) => { Q.setFromAxisAngle(Yv, rnd() * 6.28); V.set(t[0], t[3] || 0, t[1]); Sc.set(t[2], t[2], t[2]); Mx.compose(V, Q, Sc); im.setMatrixAt(i, Mx); col.setHSL(0.24 + rnd() * 0.07, 0.38 + rnd() * 0.14, 0.1 + rnd() * 0.08); im.setColorAt(i, col); });
+  im.castShadow = im.receiveShadow = true; facGroup.add(im); TREE_MESHES.push(im);
 }
 
 /* ---------- OpenStreetMap detail layer (live, loaded in the browser from Overpass) ---------- */
@@ -1342,7 +1410,7 @@ const OSM_QUERY = '[out:json][timeout:90];(' +
   'way["landuse"~"^(industrial|grass|forest|retail|commercial|recreation_ground|reservoir|village_green|cemetery)$"]({b});' +
   'way["leisure"~"^(park|garden|pitch|golf_course|nature_reserve|playground)$"]({b});' +
   'relation["natural"~"^(water|wood)$"]({b});relation["landuse"~"^(industrial|forest|grass|reservoir|retail|commercial)$"]({b});relation["leisure"~"^(park|garden|golf_course|nature_reserve)$"]({b});' +
-  'node["natural"="tree"]({b});' +
+  'node["natural"="tree"]({b});node["highway"="bus_stop"]({b});' +
   ');out geom tags;';
 const osmCover = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xe0ecc4, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
 osmCover.rotation.x = -Math.PI / 2; osmCover.receiveShadow = true; osmCover.visible = false;
@@ -1425,7 +1493,7 @@ function buildOsm(data) {
   const els = data.elements || [];
   const lists = { ind: [], green: [], wood: [], water: [], wline: [], bInd: [], bCom: [], bOth: [] };
   const roads = { roadMajor: [], roadMid: [], roadMin: [] };
-  const treePts = [], nameB = [], nameR = new Map(), parkPolys = [];
+  const busPts = [], treePts = [], nameB = [], nameR = new Map(), parkPolys = [];
   // HDB centre grid for duplicate rejection
   const hdbNear = (x, z) => {
     if (typeof HDB === 'undefined') return false;
@@ -1463,7 +1531,7 @@ function buildOsm(data) {
   };
   for (const e of els) {
     const t = e.tags || {};
-    if (e.type === 'node') { if (t.natural === 'tree') treePts.push(toWorld(e.lat, e.lon)); continue; }
+    if (e.type === 'node') { if (t.natural === 'tree') treePts.push(toWorld(e.lat, e.lon)); else if (t.highway === 'bus_stop') busPts.push(toWorld(e.lat, e.lon)); continue; }
     if (e.type === 'way' && e.geometry) {
       const g = e.geometry;
       if (t.building) {
@@ -1514,8 +1582,9 @@ function buildOsm(data) {
     const geo = treeGeo();
     const im = new THREE.InstancedMesh(geo, OM.tree, pts.length), M = new THREE.Matrix4(), col = new THREE.Color(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), Sc = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
     pts.forEach((p, i) => { const s = 0.75 + rnd() * 0.75; Q.setFromAxisAngle(Y, rnd() * 6.28); V.set(p[0], 0, p[1]); Sc.set(s, s * (0.85 + rnd() * 0.4), s); M.compose(V, Q, Sc); im.setMatrixAt(i, M); col.setHSL(0.24 + rnd() * 0.07, 0.35 + rnd() * 0.15, 0.09 + rnd() * 0.08); im.setColorAt(i, col); });
-    im.castShadow = true; im.receiveShadow = true; osmGroup.add(im);
+    im.castShadow = true; im.receiveShadow = true; osmGroup.add(im); TREE_MESHES.push(im); im.visible = S.L.trees;
   }
+  let nbus = 0; for (const q of busPts) { if (HAND_BUS.some(h => Math.hypot(h[0] - q[0], h[1] - q[1]) < 25)) continue; busStop(osmGroup, q[0], q[1], 0); nbus++; }
   // labels: named large buildings, big green/water areas, main roads
   nameB.sort((a, b) => b.a - a.a);
   let nb = 0;
