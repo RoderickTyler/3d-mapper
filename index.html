@@ -1412,19 +1412,21 @@ const OSM_QUERY = '[out:json][timeout:90];(' +
   'relation["natural"~"^(water|wood)$"]({b});relation["landuse"~"^(industrial|forest|grass|reservoir|retail|commercial)$"]({b});relation["leisure"~"^(park|garden|golf_course|nature_reserve)$"]({b});' +
   'node["natural"="tree"]({b});node["highway"="bus_stop"]({b});' +
   ');out geom tags;';
-const osmCover = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xe0ecc4, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+const osmCover = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xa9c48d, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
 osmCover.rotation.x = -Math.PI / 2; osmCover.receiveShadow = true; osmCover.visible = false;
 { const [x0, z0] = toWorld(OSM_BBOX.n, OSM_BBOX.w), [x1, z1] = toWorld(OSM_BBOX.s, OSM_BBOX.e);
   osmCover.scale.set(x1 - x0, z1 - z0, 1); osmCover.position.set((x0 + x1) / 2, -0.1, (z0 + z1) / 2); osmGroup.add(osmCover); }
 const OSM_RECTS = [[-172, 172, -172, 172], [-204, 2.4, 139, 371]];       // areas already drawn from the brochure plans
 const inRects = (x, z) => OSM_RECTS.some(r => x > r[0] && x < r[1] && z > r[2] && z < r[3]);
-const osmMat = (c, off) => new THREE.MeshStandardMaterial({ color: c, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: off, polygonOffsetUnits: off });
+const osmMat = (c, off) => new THREE.MeshStandardMaterial({ color: new THREE.Color(c).multiplyScalar(0.72), roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: off, polygonOffsetUnits: off });
 const OM = {
   ind: osmMat(0xd9d5cc, -2), green: osmMat(0xa6c97e, -3), wood: osmMat(0x86b062, -3.5), water: osmMat(0x6398ce, -4), wline: osmMat(0x6398ce, -5),
   roadMajor: osmMat(0x9fa4a8, -6), roadMid: osmMat(0xc7c9c8, -6), roadMin: osmMat(0xdfdfdb, -6),
-  bInd: new THREE.MeshStandardMaterial({ color: 0xbfc6cc, roughness: .9 }), bCom: new THREE.MeshStandardMaterial({ color: 0xd9d2c4, roughness: .9 }), bOth: new THREE.MeshStandardMaterial({ color: 0xcfcac2, roughness: .95 }),
+  bInd: new THREE.MeshStandardMaterial({ color: 0x9aa3a9, roughness: .9 }), bCom: new THREE.MeshStandardMaterial({ color: 0xb4ad9f, roughness: .9 }), bOth: new THREE.MeshStandardMaterial({ color: 0xaaa59d, roughness: .95 }),
   tree: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, vertexColors: true }),
 };
+const RES_POLY = [[-998,342],[-732,311],[-419,342],[-137,421],[145,483],[318,562],[333,703],[270,859],[192,1047],[161,1157],[270,1220],[490,1235],[678,1361],[819,1517],[803,1611],[678,1705],[552,1799],[521,1987],[427,2081],[239,2081],[-12,2097],[-137,2097],[-325,1987],[-513,1831],[-732,1580],[-920,1329],[-1061,1079],[-1108,828],[-1092,546]];
+const tracedRes = new THREE.Mesh(flatGeom(RES_POLY), OM.water); tracedRes.receiveShadow = true; osmGroup.add(tracedRes);   // traced from satellite; hidden once OpenStreetMap supplies the real outline
 const ROADW = { motorway: 26, trunk: 22, primary: 18, secondary: 14, tertiary: 11, unclassified: 8, residential: 7, living_street: 6, service: 4.5, motorway_link: 9, trunk_link: 9, primary_link: 8, secondary_link: 8, tertiary_link: 7 };
 const osmSt = $('#osm-st');
 const setOsmSt = (t, retry) => { if (osmSt) { osmSt.textContent = t + ' '; if (retry) { const b = document.createElement('button'); b.type = 'button'; b.className = 'lnk'; b.textContent = 'Retry'; b.onclick = () => loadOsm(true); osmSt.appendChild(b); } } };
@@ -1488,8 +1490,8 @@ function treeGeo() {
 let osmTimer = null;
 function pickAt(h, r) { return r < 0 ? 0 : h; }
 function buildOsm(data) {
-  while (osmGroup.children.length > 1) { const c = osmGroup.children.pop(); c.traverse && c.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
-  osmLabelGroup.clear(); OSM.obs = [];
+  while (osmGroup.children.length > 2) { const c = osmGroup.children.pop(); c.traverse && c.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+  osmLabelGroup.clear(); OSM.obs = []; let bigWater = false;
   const els = data.elements || [];
   const lists = { ind: [], green: [], wood: [], water: [], wline: [], bInd: [], bCom: [], bOth: [] };
   const roads = { roadMajor: [], roadMid: [], roadMin: [] };
@@ -1505,7 +1507,7 @@ function buildOsm(data) {
   for (const o of surroundings(0)) if (o.kind !== 'hdb' && o.kind !== 'sur') modelled.push(o.poly);
   const isModelled = (x, z) => inRects(x, z) || modelled.some(p => inPoly(x, z, p));
   const areaClass = t => {
-    if (t.natural === 'water' || t.landuse === 'reservoir' || t.waterway === 'riverbank') return 'water';
+    if (t.natural === 'water' || t.landuse === 'reservoir' || t.building === 'reservoir' || t.waterway === 'riverbank') return 'water';
     if (t.natural === 'wood' || t.natural === 'scrub' || t.landuse === 'forest') return 'wood';
     if (t.leisure === 'park' || t.leisure === 'garden' || t.leisure === 'golf_course' || t.leisure === 'nature_reserve' || t.leisure === 'pitch' || t.leisure === 'playground' || t.landuse === 'grass' || t.landuse === 'village_green' || t.landuse === 'recreation_ground' || t.natural === 'grassland') return 'green';
     if (t.landuse === 'industrial' || t.landuse === 'retail' || t.landuse === 'commercial') return 'ind';
@@ -1514,6 +1516,7 @@ function buildOsm(data) {
   const addArea = (cls, outer, holes, tags) => {
     if (!cls || outer.length < 3) return;
     try { lists[cls].push(flatGeom(outer, holes)); } catch (e) { return; }
+    if (cls === 'water' && Math.abs(ringArea(outer)) > 300000) bigWater = true;
     if (cls === 'wood' || cls === 'green') parkPolys.push({ poly: outer, wood: cls === 'wood' });
     if (tags && tags.name && Math.abs(ringArea(outer)) > 30000 && (cls === 'water' || cls === 'green' || cls === 'wood')) nameB.push({ t: tags.name, poly: outer, a: Math.abs(ringArea(outer)), kind: cls });
   };
@@ -1534,8 +1537,8 @@ function buildOsm(data) {
     if (e.type === 'node') { if (t.natural === 'tree') treePts.push(toWorld(e.lat, e.lon)); else if (t.highway === 'bus_stop') busPts.push(toWorld(e.lat, e.lon)); continue; }
     if (e.type === 'way' && e.geometry) {
       const g = e.geometry;
-      if (t.building) {
-        const r = flatRing(g); if (r.length < 3) continue;
+      if (t.building && t.building !== 'reservoir' && t.building !== 'roof' && t.building !== 'no') {
+        const r = flatRing(g); if (r.length < 3 || Math.abs(ringArea(r)) > 120000) continue;
         let cx = 0, cz = 0; for (const p of r) { cx += p[0]; cz += p[1]; } cx /= r.length; cz /= r.length;
         if (isModelled(cx, cz) || hdbNear(cx, cz)) continue;
         const h = bHeight(t), cls = /industrial|warehouse|factory|manufacture/.test(t.building) ? 'bInd' : /commercial|retail|office|supermarket|hotel/.test(t.building) ? 'bCom' : 'bOth';
@@ -1599,6 +1602,7 @@ function buildOsm(data) {
     const p = v.pts[Math.floor(v.pts.length / 2)]; if (inRects(p[0], p[1])) continue;
     const s = sprite(nm, { k: 0.1, bg: 'rgba(255,255,255,.85)', fg: '#25333f' }); s.position.set(p[0], 7, p[1]); osmLabelGroup.add(s);
   }
+  tracedRes.visible = !bigWater;
   OSM.on = S.L.osm; osmGroup.visible = S.L.osm; osmCover.visible = S.L.osm;
   setOsmSt('OpenStreetMap loaded: ' + els.filter(e => e.tags && e.tags.building).length + ' buildings, ' + Object.values(roads).reduce((a, r) => a + r.length / 18, 0).toFixed(0) + ' road segments, ' + pts.length + ' trees.');
   afterOsm();
