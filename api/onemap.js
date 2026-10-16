@@ -2,9 +2,9 @@
 // Same style as your ura proxy (CommonJS), but uses Node's built-in fetch,
 // so it needs no node-fetch and no package.json.
 //
-// Env vars to set in Vercel -> Settings -> Environment Variables:
-//   ONEMAP_EMAIL     your OneMap account email
-//   ONEMAP_PASSWORD  your OneMap account password
+// Env vars to set in Vercel -> Settings -> Environment Variables (use ONE option):
+//   Option A: ONEMAP_TOKEN                       a ready-made OneMap API token
+//   Option B: ONEMAP_EMAIL + ONEMAP_PASSWORD     your OneMap account login
 // Never put these in the code or in the repo.
 
 const ALLOWED = [
@@ -15,6 +15,9 @@ const ALLOWED = [
 let cache = { token: null, exp: 0 };
 
 async function getToken() {
+  // Option A: a ready-made token saved in Vercel as ONEMAP_TOKEN (expires after about 3 days; replace it when it does)
+  if (process.env.ONEMAP_TOKEN) return process.env.ONEMAP_TOKEN;
+  // Option B: email + password, so the function fetches fresh tokens by itself
   // reuse the token until about an hour before it expires
   if (cache.token && Date.now() < cache.exp - 3600e3) return cache.token;
   const r = await fetch('https://www.onemap.gov.sg/api/auth/post/getToken', {
@@ -25,8 +28,10 @@ async function getToken() {
       password: process.env.ONEMAP_PASSWORD,
     }),
   });
-  const d = await r.json();
-  if (!d.access_token) throw new Error('OneMap login failed');
+  const text = await r.text();
+  let d = {};
+  try { d = JSON.parse(text); } catch (e) { /* not JSON */ }
+  if (!d.access_token) throw new Error('OneMap login failed. HTTP ' + r.status + '. Reply: ' + text.slice(0, 200));
   cache = { token: d.access_token, exp: Number(d.expiry_timestamp) * 1000 };
   return cache.token;
 }
@@ -63,6 +68,14 @@ module.exports = async (req, res) => {
     return res.status(r.status).json(data);
   } catch (e) {
     console.error('onemap error:', e.message);
-    return res.status(502).json({ error: 'upstream failed' });
+    // TEMPORARY DEBUG: shows the reason in the browser. Never includes your password. Remove once it works.
+    return res.status(502).json({
+      error: 'upstream failed',
+      reason: e.message,
+      emailSet: !!process.env.ONEMAP_EMAIL,
+      passwordSet: !!process.env.ONEMAP_PASSWORD,
+      tokenSet: !!process.env.ONEMAP_TOKEN,
+      node: process.version,
+    });
   }
 };
