@@ -1636,7 +1636,7 @@ function buildOsm(data) {
       if (t.building && t.building !== 'reservoir' && t.building !== 'roof' && t.building !== 'no' && !t.natural && !t.landuse && !t.leisure && !t.waterway) {
         const r = flatRing(g); if (r.length < 3 || Math.abs(ringArea(r)) > 120000) continue;
         let cx = 0, cz = 0; for (const p of r) { cx += p[0]; cz += p[1]; } cx /= r.length; cz /= r.length;
-        if (isModelled(cx, cz) || hdbNear(cx, cz)) continue;
+        if (isModelled(cx, cz) || hdbNear(cx, cz) || t.amenity === 'fuel' || (cx > -2020 && cx < -1900 && cz > -595 && cz < -470)) continue;   // petrol kiosk west of Taman Jurong: OSM draws it as a tall tower
         const h = bHeight(t), cls = /industrial|warehouse|factory|manufacture/.test(t.building) ? 'bInd' : /commercial|retail|office|supermarket|hotel/.test(t.building) ? 'bCom' : 'bOth';
         try { const sh = new THREE.Shape(r.map(([x, z]) => new THREE.Vector2(x, -z))); const eg = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false }); eg.rotateX(-Math.PI / 2); lists[cls].push(eg); } catch (er) { continue; }
         if (h >= 6) OSM.obs.push({ id: 'osm' + e.id, name: t.name || (cls === 'bInd' ? 'Industrial building' : 'Building'), top: h, kind: 'osm', poly: r });
