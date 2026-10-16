@@ -1,8 +1,16 @@
 // api/onemap.js  (Vercel serverless function for the 3d-mapper project)
+// Same style as your ura proxy (CommonJS), but uses Node's built-in fetch,
+// so it needs no node-fetch and no package.json.
+//
 // Env vars to set in Vercel -> Settings -> Environment Variables:
 //   ONEMAP_EMAIL     your OneMap account email
 //   ONEMAP_PASSWORD  your OneMap account password
 // Never put these in the code or in the repo.
+
+const ALLOWED = [
+  'https://3d-mapper-azure.vercel.app',
+  'https://rodericktyler.github.io',
+];
 
 let cache = { token: null, exp: 0 };
 
@@ -23,7 +31,13 @@ async function getToken() {
   return cache.token;
 }
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+
   try {
     const { action, q, lat, lng } = req.query;
     let url;
@@ -48,6 +62,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
     return res.status(r.status).json(data);
   } catch (e) {
+    console.error('onemap error:', e.message);
     return res.status(502).json({ error: 'upstream failed' });
   }
-}
+};
